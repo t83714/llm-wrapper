@@ -1,0 +1,14 @@
+{
+  "name": "llm-wrapper",
+  "version": "1.0.0",
+  "repository": "git@github.com:t83714/llm-wrapper.git",
+  "author": "Jacky Jiang <t83714@gmail.com>",
+  "license": "Apache 2.0",
+  "private": true,
+  "workspaces": [
+    "http-service-agent"
+  ],
+  "devDependencies": {
+    "@magda/docker-utils": "^2.2.4"
+  }
+}
