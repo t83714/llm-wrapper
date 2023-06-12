@@ -9,6 +9,7 @@
     "http-service-agent"
   ],
   "devDependencies": {
-    "@magda/docker-utils": "^2.2.4"
+    "@magda/docker-utils": "^2.2.4",
+    "prettier": "^2.8.8"
   }
 }
