@@ -1,5 +1,6 @@
 import http2 from "node:http2";
 import { NextFunction } from "./composeStreamMiddleware.js";
+import { HttpMethod } from "../utils/constants.js";
 
 const {
     HTTP2_HEADER_METHOD,
@@ -8,7 +9,10 @@ const {
     HTTP2_HEADER_CONTENT_TYPE
 } = http2.constants;
 
-export default function matchMethodPath(method: string, path: string | RegExp) {
+export default function matchMethodPath(
+    method: HttpMethod,
+    path: string | RegExp
+) {
     return (
         stream: http2.ServerHttp2Stream,
         headers: http2.IncomingHttpHeaders,

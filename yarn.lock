@@ -37,6 +37,18 @@
     lodash "^4.17.5"
     yargs "^12.0.5"
 
+"@streamparser/json-node@^0.0.15":
+  version "0.0.15"
+  resolved "https://registry.yarnpkg.com/@streamparser/json-node/-/json-node-0.0.15.tgz#e86cf1d4ac97b1ea647cd171e717479d24bdb39b"
+  integrity sha512-el3Z9eIXRb2hw2TVFo88tuEgviocSmX4Bz0XCT5teK0lfCVz8odwHRe1oWAzSjpEDqU/2GzIdrCN4jXUuIRJgQ==
+  dependencies:
+    "@streamparser/json" "^0.0.15"
+
+"@streamparser/json@^0.0.15":
+  version "0.0.15"
+  resolved "https://registry.yarnpkg.com/@streamparser/json/-/json-0.0.15.tgz#405fbe94877ce0cbd3cf650b4d9186a0ec6acd0a"
+  integrity sha512-6oikjkMTYAHGqKmcC9leE4+kY4Ch4eiTImXUN/N4d2bNGBYs0LJ/tfxmpvF5eExSU7iiPlV9jYlADqvj3NWA3Q==
+
 "@tsconfig/node10@^1.0.7":
   version "1.0.9"
   resolved "https://registry.yarnpkg.com/@tsconfig/node10/-/node10-1.0.9.tgz#df4907fc07a886922637b15e02d4cebc4c0021b2"
