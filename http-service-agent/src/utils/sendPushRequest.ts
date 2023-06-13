@@ -6,13 +6,14 @@ const {
     HTTP2_HEADER_STATUS,
     HTTP2_HEADER_CONTENT_TYPE
 } = http2.constants;
+import { Readable } from "node:stream";
 import { HttpMethod } from "./constants.js";
 
 export interface PushRequestOptions {
     method: HttpMethod;
     path: string;
     contentType?: string;
-    data?: Buffer;
+    data?: Buffer | Readable;
     returnStream?: boolean;
 }
 
@@ -42,14 +43,25 @@ async function sendPushRequest<T = any>(
                 try {
                     if (err) throw err;
                     if (data) {
-                        pushStream.write(data, (err) => {
-                            if (err) {
+                        if (data instanceof Readable) {
+                            data.pipe(pushStream);
+                            data.on("error", (err) => {
                                 reject(err);
                                 pushStream.destroy(err);
-                            } else {
+                            });
+                            data.on("end", () => {
                                 resolve(pushStream);
-                            }
-                        });
+                            });
+                        } else {
+                            pushStream.write(data, (err) => {
+                                if (err) {
+                                    reject(err);
+                                    pushStream.destroy(err);
+                                } else {
+                                    resolve(pushStream);
+                                }
+                            });
+                        }
                     } else {
                         resolve(pushStream);
                     }
