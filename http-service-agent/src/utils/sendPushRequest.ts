@@ -35,9 +35,9 @@ async function sendPushRequest<T = any>(
     const pStream = new Promise<http2.ServerHttp2Stream>((resolve, reject) => {
         controllerStream.pushStream(
             {
-                HTTP2_HEADER_METHOD: method,
-                HTTP2_HEADER_PATH: path,
-                HTTP2_HEADER_CONTENT_TYPE: contentType
+                [HTTP2_HEADER_METHOD]: method,
+                [HTTP2_HEADER_PATH]: path,
+                [HTTP2_HEADER_CONTENT_TYPE]: contentType
             },
             (err, pushStream, headers) => {
                 try {

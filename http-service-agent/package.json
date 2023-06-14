@@ -8,7 +8,10 @@
   "private": true,
   "scripts": {
     "build": "tsc -b",
-    "dev": "ts-node --esm ./src/index.ts"
+    "dev-client": "ts-node --esm ./src/startClient.ts",
+    "dev-server": "ts-node --esm ./src/startServer.ts",
+    "start-client": "node ./dist/startClient.js",
+    "start-server": "node ./dist/startServer.js"
   },
   "devDependencies": {
     "@types/express": "^4.17.17",

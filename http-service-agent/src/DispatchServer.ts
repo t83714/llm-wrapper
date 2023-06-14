@@ -13,24 +13,23 @@ const {
 import sendPushRequest from "./utils/sendPushRequest.js";
 import express, { Express } from "express";
 import morgan from "morgan";
-import pkg from "#package.json";
+import pkg from "#package.json" assert { type: "json" };
 
-interface DispatchCenterConfigOptions {
-    accessKeys: string[];
-    controllerServerPort: 6701;
-    serviceServer: 6702;
-    peerMaxConcurrentStreams: 500;
+const DEFAULT_CONFIG = {
+    accessKeys: [] as string[],
+    controllerServerPort: 6701,
+    serviceServer: 6702,
+    peerMaxConcurrentStreams: 500,
     // in milliseconds, used to keep session.
-    pingInterval: 3000;
-    enableServiceLogs: true;
-}
+    pingInterval: 3000,
+    enableServiceLogs: true,
+    debug: false
+};
 
-const server = http2.createServer({
-    peerMaxConcurrentStreams: 100
-});
+type DispatchServerConfigOptions = Partial<typeof DEFAULT_CONFIG>;
 
-class DispatchCenter {
-    private options: DispatchCenterConfigOptions;
+class DispatchServer {
+    private options: DispatchServerConfigOptions;
     private controllerServer: http2.Http2Server | null = null;
     private controllerSessions: http2.ServerHttp2Session[] = [];
     private controllerStreams: http2.ServerHttp2Stream[] = [];
@@ -38,8 +37,11 @@ class DispatchCenter {
     private serviceApp: Express | null = null;
     private serviceServer: http.Server | null = null;
 
-    constructor(options: DispatchCenterConfigOptions) {
-        this.options = options;
+    constructor(options: DispatchServerConfigOptions) {
+        this.options = {
+            ...DEFAULT_CONFIG,
+            ...options
+        };
     }
 
     removeSession(session: http2.ServerHttp2Session) {
@@ -66,7 +68,7 @@ class DispatchCenter {
         if (this.options.enableServiceLogs) {
             app.use(morgan("combined"));
         }
-        app.use(async(req, res) => {
+        app.use(async (req, res) => {
             this.controllerStreams = this.controllerStreams.filter(
                 (stream) => stream && !stream.closed && !stream.destroyed
             );
@@ -81,23 +83,24 @@ class DispatchCenter {
                     Math.floor(Math.random() * this.controllerStreams.length)
                 ];
 
-            const resStream = await sendPushRequest<http2.ServerHttp2Stream>(controlStream, {
-                returnStream: true,
-                method: req.method as any,
-                path: req.originalUrl,
-                data: req,
-                contentType: req.headers["content-type"]
-            });
+            const resStream = await sendPushRequest<http2.ServerHttp2Stream>(
+                controlStream,
+                {
+                    returnStream: true,
+                    method: req.method as any,
+                    path: req.originalUrl,
+                    data: req,
+                    contentType: req.headers["content-type"]
+                }
+            );
             resStream.pipe(res);
         });
     }
 
     startControllerServer() {
+        this.printDebugInfo("starting the controlling server...");
         this.controllerServer = http2.createServer({
-            peerMaxConcurrentStreams: this.options.peerMaxConcurrentStreams,
-            settings: {
-                enablePush: true
-            }
+            peerMaxConcurrentStreams: this.options.peerMaxConcurrentStreams
         });
 
         this.controllerServer.on(
@@ -105,11 +108,16 @@ class DispatchCenter {
             this.setupControllerSession.bind(this)
         );
         this.controllerServer.listen(this.options.controllerServerPort);
+        this.printDebugInfo(
+            `started the controlling server on ${this.options.controllerServerPort}`
+        );
     }
 
     setupControllerSession(session: http2.ServerHttp2Session) {
+        this.printDebugInfo("setting up controller session...");
         this.controllerSessions.push(session);
         session.on("close", () => {
+            this.printDebugInfo("The controller session is closing...");
             this.controllerSessions = this.controllerSessions.filter(
                 (item) => item !== session
             );
@@ -125,21 +133,25 @@ class DispatchCenter {
                 `FrameError occured for controller session. type: ${type}, code: ${code}, id: ${id}`
             );
         });
+        this.printDebugInfo("The controller session middleware...");
         session.on(
             "stream",
             composeStreamMiddleware([
                 basicAuth(this.options.accessKeys),
                 matchMethodPath("POST", "/__bind"),
-                mustAllowPush,
                 this.setupControllerStream.bind(this)
             ])
         );
+        this.printDebugInfo("The controller session setup completed.");
     }
 
     async setupControllerStream(stream: http2.ServerHttp2Stream) {
         try {
             // status code 202 indicate the request has been accepted at server
-            stream.respond({ HTTP2_HEADER_STATUS: 202 }, { endStream: false });
+            stream.respond(
+                { [HTTP2_HEADER_STATUS]: 202 },
+                { endStream: false }
+            );
             await this.sendAckRequest(stream);
             this.controllerStreams.push(stream);
             const timer = setInterval(() => {
@@ -159,48 +171,29 @@ class DispatchCenter {
         }
     }
 
-    async sendAckRequest(controllerStream: http2.ServerHttp2Stream) {
+    async sendAckRequest(stream: http2.ServerHttp2Stream) {
         try {
-            // send ack request
-            const resData = await sendPushRequest(controllerStream, {
-                method: "POST",
-                path: "/__bind",
-                data: Buffer.from(
-                    JSON.stringify({
-                        version: pkg.version,
-                        app: pkg.name,
-                        type: "ack",
-                        role: "server"
-                    }),
-                    "utf8"
-                )
-            });
-            if (resData?.app !== pkg.name) {
-                throw new Error(
-                    `Invalid ack response from client: invalid 'app' field: ${resData?.app}`
-                );
-            }
-            if (resData?.type !== "ack") {
-                throw new Error(
-                    `Invalid ack response from client: invalid 'type' field: ${resData?.type}`
-                );
-            }
-            if (resData?.role !== "client") {
-                throw new Error(
-                    `Invalid ack response from client: invalid 'role' field: ${resData?.role}`
-                );
-            }
-            if (resData?.version !== pkg.version) {
-                console.warn(
-                    `A client with a different version has connected to the controller: ${resData}`
-                );
-            }
+            stream.write(
+                JSON.stringify({
+                    version: pkg.version,
+                    app: pkg.name,
+                    type: "ack",
+                    role: "server"
+                })
+            );
         } catch (err) {
             console.log(`Failed to send ack request to the client: ${err}`);
         }
     }
 
+    printDebugInfo(msg: string) {
+        if (this.options.debug) {
+            console.log(`DispatchServer: ${msg}`);
+        }
+    }
+
     cleanUp() {
+        this.printDebugInfo("start to clean up...");
         if (this.controllerStreams.length) {
             for (const stream of this.controllerStreams) {
                 if (stream && !stream.destroyed) {
@@ -230,4 +223,4 @@ class DispatchCenter {
     }
 }
 
-export default DispatchCenter;
+export default DispatchServer;

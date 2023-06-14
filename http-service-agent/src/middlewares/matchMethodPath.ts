@@ -18,14 +18,19 @@ export default function matchMethodPath(
         headers: http2.IncomingHttpHeaders,
         next: NextFunction
     ) => {
+        console.log(`headers: ${JSON.stringify(headers)}`);
+        console.log(`method: ${method}`);
+        console.log(`method: ${method}`);
         if (headers[HTTP2_HEADER_METHOD] === method) {
-            const path = headers[HTTP2_HEADER_PATH] as string;
-            const pathname = new URL(path ? path : "", "http://dummy.com")
-                .pathname;
+            const requestPath = headers[HTTP2_HEADER_PATH] as string;
+            const requestPathname = new URL(
+                requestPath ? requestPath : "",
+                "http://dummy.com"
+            ).pathname;
             if (
                 (typeof path === "string" &&
-                    path.toLowerCase() === pathname.toLowerCase()) ||
-                ((path as any) instanceof RegExp && pathname.match(path))
+                    path.toLowerCase() === requestPathname.toLowerCase()) ||
+                ((path as any) instanceof RegExp && requestPathname.match(path))
             ) {
                 return next();
             }

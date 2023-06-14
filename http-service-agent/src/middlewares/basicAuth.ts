@@ -8,7 +8,7 @@ const {
     HTTP2_HEADER_WWW_AUTHENTICATE
 } = http2.constants;
 
-const DEFAULT_USERNAME = "http-service-agent";
+export const DEFAULT_USERNAME = "http-service-agent";
 
 /**
  * a middleware checking implement simple access control via basic auth protocol.
@@ -20,7 +20,7 @@ const DEFAULT_USERNAME = "http-service-agent";
  * @return {*}
  */
 export default function basicAuth(
-    accessKeys: string[],
+    accessKeys?: string[],
     defaultUsername: string = DEFAULT_USERNAME
 ) {
     return (
