@@ -178,8 +178,9 @@ class DispatchServer {
                     version: pkg.version,
                     app: pkg.name,
                     type: "ack",
-                    role: "server"
-                })
+                    role: "server",
+                    time: new Date().toTimeString()
+                }) + "\n"
             );
         } catch (err) {
             console.log(`Failed to send ack request to the client: ${err}`);

@@ -1,5 +1,5 @@
 import http2 from "node:http2";
-import { JSONParser } from "@streamparser/json-node";
+import JSONParser from "stream-json";
 const {
     HTTP2_HEADER_METHOD,
     HTTP2_HEADER_PATH,
@@ -80,7 +80,7 @@ async function sendPushRequest<T = any>(
     }
     const pDecodeRes = new Promise<T>((resolve, reject) => {
         try {
-            const parser = new JSONParser();
+            const parser = JSONParser();
             stream.pipe(parser);
             let valueEmitted = false;
             parser.on("data", (value) => {

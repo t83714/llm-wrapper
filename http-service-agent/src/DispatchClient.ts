@@ -1,7 +1,7 @@
 import http2 from "node:http2";
 import { DEFAULT_USERNAME } from "./middlewares/basicAuth.js";
 import pkg from "#package.json" assert { type: "json" };
-import { JSONParser } from "@streamparser/json-node";
+import JsonlParser from "stream-json/jsonl/Parser.js";
 
 const {
     HTTP2_HEADER_PATH,
@@ -35,16 +35,16 @@ class DispatchClient {
         this.session = await this.connect();
         this.stream = await this.request(this.session);
 
-        // const parser = new JSONParser();
-        // this.stream.pipe(parser);
+        const parser = new JsonlParser();
+        const pipeline = this.stream.pipe(parser);
 
-        // parser.on("data", (v) => {
-        //     console.log(`data received: ${JSON.stringify(v)}`);
-        // });
-
-        this.stream.on("data", (chunk: Buffer) => {
-            console.log(chunk.toString("utf8"));
+        pipeline.on("data", (v: any) => {
+            console.log(`data received: ${JSON.stringify(v)}`);
         });
+
+        // this.stream.on("data", (chunk: Buffer) => {
+        //     console.log(chunk.toString("utf8"));
+        // });
     }
 
     async connect() {

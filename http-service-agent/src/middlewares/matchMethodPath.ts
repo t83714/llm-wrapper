@@ -18,9 +18,6 @@ export default function matchMethodPath(
         headers: http2.IncomingHttpHeaders,
         next: NextFunction
     ) => {
-        console.log(`headers: ${JSON.stringify(headers)}`);
-        console.log(`method: ${method}`);
-        console.log(`method: ${method}`);
         if (headers[HTTP2_HEADER_METHOD] === method) {
             const requestPath = headers[HTTP2_HEADER_PATH] as string;
             const requestPathname = new URL(
