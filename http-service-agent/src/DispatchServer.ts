@@ -1,9 +1,10 @@
 import http2 from "node:http2";
 import http from "node:http";
-import composeStreamMiddleware from "./middlewares/composeStreamMiddleware.js";
+import composeStreamMiddleware, {
+    NextFunction
+} from "./middlewares/composeStreamMiddleware.js";
 import basicAuth from "./middlewares/basicAuth.js";
-import matchMethodPath from "./middlewares/matchMethodPath.js";
-import mustAllowPush from "./middlewares/mustAllowPush.js";
+import ControllerStream from "./ControllerStream.js";
 const {
     HTTP2_HEADER_METHOD,
     HTTP2_HEADER_PATH,
@@ -14,6 +15,7 @@ import sendPushRequest from "./utils/sendPushRequest.js";
 import express, { Express } from "express";
 import morgan from "morgan";
 import pkg from "#package.json" assert { type: "json" };
+import BaseStream from "./BaseStream.js";
 
 const DEFAULT_CONFIG = {
     accessKeys: [] as string[],
@@ -23,25 +25,63 @@ const DEFAULT_CONFIG = {
     // in milliseconds, used to keep session.
     pingInterval: 3000,
     enableServiceLogs: true,
-    debug: false
+    debug: false,
+    // wait up to 25 seconds for existing streams to be finish
+    // before force shutdown
+    gracefulShutdownDeadline: 25000
 };
 
 type DispatchServerConfigOptions = Partial<typeof DEFAULT_CONFIG>;
 
+type ControllerStreamHandler = (
+    stream: http2.ServerHttp2Stream,
+    headers: http2.IncomingHttpHeaders
+) => BaseStream | void | Promise<void> | Promise<BaseStream>;
+
 class DispatchServer {
-    private options: DispatchServerConfigOptions;
+    public options: DispatchServerConfigOptions;
     private controllerServer: http2.Http2Server | null = null;
     private controllerSessions: http2.ServerHttp2Session[] = [];
-    private controllerStreams: http2.ServerHttp2Stream[] = [];
+    private controllerStreams: BaseStream[] = [];
 
     private serviceApp: Express | null = null;
     private serviceServer: http.Server | null = null;
+
+    private controllerStreamHandlerRegistry: {
+        [key: string]: ControllerStreamHandler;
+    } = {};
 
     constructor(options: DispatchServerConfigOptions) {
         this.options = {
             ...DEFAULT_CONFIG,
             ...options
         };
+        this.registerControllerStreamHandler(
+            "POST",
+            "/__bind",
+            (stream, headers) =>
+                new ControllerStream(this, stream, headers, this.options.debug)
+        );
+    }
+
+    createControllerStreamHandlerRegistryKey(method: string, path: string) {
+        return `${method.toLowerCase()}@${path.toLowerCase()}`;
+    }
+
+    registerControllerStreamHandler(
+        method: string,
+        path: string,
+        handler: ControllerStreamHandler
+    ) {
+        this.controllerStreamHandlerRegistry[
+            this.createControllerStreamHandlerRegistryKey(method, path)
+        ] = handler;
+    }
+
+    deregisterControllerStreamHandler(method: string, path: string) {
+        delete this.controllerStreamHandlerRegistry[
+            this.createControllerStreamHandlerRegistryKey(method, path)
+        ];
     }
 
     removeSession(session: http2.ServerHttp2Session) {
@@ -50,14 +90,11 @@ class DispatchServer {
         );
     }
 
-    removeStream(stream: http2.ServerHttp2Stream) {
-        this.controllerStreams = this.controllerStreams.filter(
-            (item) => item !== stream
-        );
-    }
-
     start() {
-        this.cleanUp();
+        if (this.controllerServer) {
+            console.error("The server has already started!");
+            return;
+        }
         this.startControllerServer();
         this.startServingApp();
     }
@@ -68,33 +105,6 @@ class DispatchServer {
         if (this.options.enableServiceLogs) {
             app.use(morgan("combined"));
         }
-        app.use(async (req, res) => {
-            this.controllerStreams = this.controllerStreams.filter(
-                (stream) => stream && !stream.closed && !stream.destroyed
-            );
-            if (this.controllerStreams.length) {
-                res.status(503).send(
-                    "remote task executor agents have not connected to the service agent yet."
-                );
-            }
-            // randomly select one connection
-            const controlStream =
-                this.controllerStreams[
-                    Math.floor(Math.random() * this.controllerStreams.length)
-                ];
-
-            const resStream = await sendPushRequest<http2.ServerHttp2Stream>(
-                controlStream,
-                {
-                    returnStream: true,
-                    method: req.method as any,
-                    path: req.originalUrl,
-                    data: req,
-                    contentType: req.headers["content-type"]
-                }
-            );
-            resStream.pipe(res);
-        });
     }
 
     startControllerServer() {
@@ -102,10 +112,12 @@ class DispatchServer {
         this.controllerServer = http2.createServer({
             peerMaxConcurrentStreams: this.options.peerMaxConcurrentStreams
         });
-
+        this.controllerServer.on("sessionError", (err: Error) => {
+            console.error(`Session error: ${err}`);
+        });
         this.controllerServer.on(
             "session",
-            this.setupControllerSession.bind(this)
+            this.handleControllerServerSessions.bind(this)
         );
         this.controllerServer.listen(this.options.controllerServerPort);
         this.printDebugInfo(
@@ -113,8 +125,55 @@ class DispatchServer {
         );
     }
 
-    setupControllerSession(session: http2.ServerHttp2Session) {
-        this.printDebugInfo("setting up controller session...");
+    handleControllerServerSessions(session: http2.ServerHttp2Session) {
+        this.printDebugInfo("A new controller session started...");
+        session.on(
+            "stream",
+            composeStreamMiddleware([
+                basicAuth(this.options.accessKeys),
+                async (
+                    stream: http2.ServerHttp2Stream,
+                    headers: http2.IncomingHttpHeaders,
+                    next: NextFunction
+                ) => {
+                    const requestMethod = headers[
+                        HTTP2_HEADER_METHOD
+                    ] as string;
+                    const requestPath = headers[HTTP2_HEADER_PATH] as string;
+                    const requestPathname = new URL(
+                        requestPath ? requestPath : "",
+                        "http://dummy.com"
+                    ).pathname;
+
+                    const handler =
+                        this.controllerStreamHandlerRegistry[
+                            this.createControllerStreamHandlerRegistryKey(
+                                requestMethod,
+                                requestPathname
+                            )
+                        ];
+
+                    if (typeof handler === "function") {
+                        let result = handler(stream, headers);
+                        if (result instanceof Promise) {
+                            result = await result;
+                        }
+                        if (result instanceof BaseStream) {
+                            this.controllerStreams.push(result);
+                        }
+                    } else {
+                        // either method or path not match, respond 404
+                        stream.respond({
+                            [HTTP2_HEADER_STATUS]: 404,
+                            [HTTP2_HEADER_CONTENT_TYPE]:
+                                "text/plain; charset=utf-8"
+                        });
+                        stream.end("Not found");
+                    }
+                }
+            ])
+        );
+
         this.controllerSessions.push(session);
         session.on("close", () => {
             this.printDebugInfo("The controller session is closing...");
@@ -134,57 +193,8 @@ class DispatchServer {
             );
         });
         this.printDebugInfo("The controller session middleware...");
-        session.on(
-            "stream",
-            composeStreamMiddleware([
-                basicAuth(this.options.accessKeys),
-                matchMethodPath("POST", "/__bind"),
-                this.setupControllerStream.bind(this)
-            ])
-        );
+
         this.printDebugInfo("The controller session setup completed.");
-    }
-
-    async setupControllerStream(stream: http2.ServerHttp2Stream) {
-        try {
-            // status code 202 indicate the request has been accepted at server
-            stream.respond(
-                { [HTTP2_HEADER_STATUS]: 202 },
-                { endStream: false }
-            );
-            await this.sendAckRequest(stream);
-            this.controllerStreams.push(stream);
-            const timer = setInterval(() => {
-                if (!stream || stream.destroyed || stream.closed) {
-                    clearInterval(timer);
-                    return;
-                }
-                this.sendAckRequest(stream).catch((err) => {
-                    console.error(err);
-                    this.removeStream(stream);
-                    stream.destroy();
-                });
-            }, this.options.pingInterval);
-        } catch (err) {
-            console.log(`Failed to setup controller stream: ${err}`);
-            stream.destroy(err as Error);
-        }
-    }
-
-    async sendAckRequest(stream: http2.ServerHttp2Stream) {
-        try {
-            stream.write(
-                JSON.stringify({
-                    version: pkg.version,
-                    app: pkg.name,
-                    type: "ack",
-                    role: "server",
-                    time: new Date().toTimeString()
-                }) + "\n"
-            );
-        } catch (err) {
-            console.log(`Failed to send ack request to the client: ${err}`);
-        }
     }
 
     printDebugInfo(msg: string) {
@@ -193,24 +203,8 @@ class DispatchServer {
         }
     }
 
-    cleanUp() {
-        this.printDebugInfo("start to clean up...");
-        if (this.controllerStreams.length) {
-            for (const stream of this.controllerStreams) {
-                if (stream && !stream.destroyed) {
-                    stream.destroy();
-                }
-            }
-            this.controllerStreams = [];
-        }
-        if (this.controllerSessions.length) {
-            for (const session of this.controllerSessions) {
-                if (session && !session.destroyed) {
-                    session.destroy();
-                }
-            }
-            this.controllerSessions = [];
-        }
+    shutdown() {
+        this.printDebugInfo("start to shutdown...");
         if (this.controllerServer) {
             this.controllerServer.close();
             this.controllerServer = null;
@@ -220,6 +214,25 @@ class DispatchServer {
             this.serviceServer.closeAllConnections();
             this.serviceServer = null;
             this.serviceApp = null;
+        }
+        if (this.controllerStreams.length) {
+            for (const stream of this.controllerStreams) {
+                stream.cleanUp();
+            }
+            this.controllerStreams = [];
+        }
+        if (this.controllerSessions.length) {
+            for (const session of this.controllerSessions) {
+                if (session) {
+                    const timer = setTimeout(
+                        () => session.destroy(),
+                        this.options.gracefulShutdownDeadline
+                    );
+                    session.on("close", () => clearTimeout(timer));
+                    session.close();
+                }
+            }
+            this.controllerSessions = [];
         }
     }
 }

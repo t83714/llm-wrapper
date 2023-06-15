@@ -35,4 +35,10 @@ export const HttpMethods = [
     "UNSUBSCRIBE"
 ] as const;
 
-export type HttpMethod = typeof HttpMethods[number];
+export type HttpMethod = (typeof HttpMethods)[number];
+
+export const ControlCommands = {
+    hello: "hello",
+    ping: "ping",
+    delegateRequest: "delegateRequest"
+};
