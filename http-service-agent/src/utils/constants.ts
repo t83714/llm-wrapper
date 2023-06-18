@@ -41,4 +41,4 @@ export const ControlCommands = {
     hello: "hello",
     ping: "ping",
     delegateRequest: "delegateRequest"
-};
+} as const;

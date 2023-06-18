@@ -1,7 +1,10 @@
 import http2 from "node:http2";
 import { DEFAULT_USERNAME } from "./middlewares/basicAuth.js";
-import pkg from "#package.json" assert { type: "json" };
 import JsonlParser from "stream-json/jsonl/Parser.js";
+import createCommandData, {
+    CommandDataType
+} from "./utils/createCommandData.js";
+import { ControlCommands } from "./utils/constants.js";
 
 const {
     HTTP2_HEADER_PATH,
@@ -37,14 +40,26 @@ class DispatchClient {
 
         const parser = new JsonlParser();
         const pipeline = this.stream.pipe(parser);
+        pipeline.on("data", this.processCommand);
+    }
 
-        pipeline.on("data", (v: any) => {
-            console.log(`data received: ${JSON.stringify(v)}`);
-        });
+    sendJsonRes(data: Record<string, any>) {
+        this.stream?.write(JSON.stringify(data) + "\n");
+    }
 
-        // this.stream.on("data", (chunk: Buffer) => {
-        //     console.log(chunk.toString("utf8"));
-        // });
+    async processCommand(commandData: CommandDataType) {
+        switch (commandData?.type) {
+            case ControlCommands.hello:
+                this.sendJsonRes(
+                    createCommandData(ControlCommands.hello, "client")
+                );
+                break;
+            case ControlCommands.ping:
+                this.sendJsonRes(
+                    createCommandData(ControlCommands.ping, "client")
+                );
+                break;
+        }
     }
 
     async connect() {
