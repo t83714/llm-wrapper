@@ -16,6 +16,7 @@ import express, { Express } from "express";
 import morgan from "morgan";
 import pkg from "#package.json" assert { type: "json" };
 import BaseStream from "./BaseStream.js";
+import getPathOnly from "./utils/getPathOnly.js";
 
 const DEFAULT_CONFIG = {
     accessKeys: [] as string[],
@@ -140,10 +141,7 @@ class DispatchServer {
                         HTTP2_HEADER_METHOD
                     ] as string;
                     const requestPath = headers[HTTP2_HEADER_PATH] as string;
-                    const requestPathname = new URL(
-                        requestPath ? requestPath : "",
-                        "http://dummy.com"
-                    ).pathname;
+                    const requestPathname = requestPath ? getPathOnly(requestPath) : "/";
 
                     const handler =
                         this.controllerStreamHandlerRegistry[

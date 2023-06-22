@@ -1,17 +1,20 @@
 import http2 from "node:http2";
 import BaseStream from "./BaseStream.js";
 import DispatchServer from "./DispatchServer.js";
-import pkg from "#package.json" assert { type: "json" };
 import JsonlParser from "stream-json/jsonl/Parser.js";
 import { ControlCommands } from "./utils/constants.js";
 import createCommandData, {
     CommandDataType
 } from "./utils/createCommandData.js";
+import { Request, Response } from "express";
+import { v4 as uuidV4 } from "uuid";
+const { HTTP2_HEADER_CONTENT_TYPE } = http2.constants;
 
 type ResponseHandlerType = (v: any) => void;
 
 const DEFAULT_REQUEST_TIMEOUT = 3000;
 const DEFAULT_PING_INTERVAL = 3500;
+const DEFAULT_DELEGATE_REQUEST_TIMEOUT = 5000;
 
 class ControllerStream extends BaseStream {
     private headers: http2.IncomingHttpHeaders;
@@ -143,6 +146,80 @@ class ControllerStream extends BaseStream {
                 );
             }
         }, DEFAULT_PING_INTERVAL);
+    }
+
+    async delegateExpressRequest(req: Request, res: Response) {
+        const method = req.method.toUpperCase();
+        const responsePath = `/__bind/response/${uuidV4()}`;
+
+        this.printDebugInfo(
+            `Receive delegate request for: ${method} ${req.originalUrl}`
+        );
+
+        const responseStreamPromise = new Promise<
+            [http2.ServerHttp2Stream, http2.IncomingHttpHeaders]
+        >((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this.server.deregisterControllerStreamHandler(
+                    method,
+                    responsePath
+                );
+                throw new Error(
+                    `Request timeout after ${DEFAULT_DELEGATE_REQUEST_TIMEOUT}ms`
+                );
+            }, DEFAULT_DELEGATE_REQUEST_TIMEOUT);
+
+            const handler = (
+                stream: http2.ServerHttp2Stream,
+                headers: http2.IncomingHttpHeaders
+            ) => {
+                if (timer) {
+                    clearTimeout(timer);
+                }
+                resolve([stream, headers]);
+            };
+
+            this.server.registerControllerStreamHandler(
+                method,
+                responsePath,
+                handler
+            );
+        });
+
+        const commandData = createCommandData(
+            ControlCommands.delegateRequest,
+            "server",
+            {
+                method,
+                path: req.originalUrl,
+                responsePath,
+                data: req?.body,
+                headers: req.headers
+            }
+        );
+
+        // send command data through control stream
+        this.stream.write(JSON.stringify(commandData) + "\n");
+
+        const [resStream, resHeaders] = await responseStreamPromise;
+
+        this.printDebugInfo(
+            `Received response stream for delegate request: ${method} ${req.originalUrl}`
+        );
+
+        res.status(resHeaders["delegate-status-code"] as unknown as number);
+        if (resHeaders[HTTP2_HEADER_CONTENT_TYPE]) {
+            res.type(
+                resHeaders[HTTP2_HEADER_CONTENT_TYPE] as unknown as string
+            );
+        }
+        resStream.pipe(res);
+    }
+
+    printDebugInfo(msg: string) {
+        if (this.server.options.debug) {
+            console.log(`ControllerStream: ${msg}`);
+        }
     }
 
     cleanUp() {
