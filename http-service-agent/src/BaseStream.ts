@@ -16,6 +16,10 @@ class BaseStream {
         this.debug = debug;
     }
 
+    isClosed(){
+        return this.stream.closed || this.stream.destroyed;
+    }
+
     cleanUp() {
         if (this.stream.destroyed) {
             return;

@@ -6,10 +6,10 @@ import createCommandData, {
     DelegateRequestCommandDataType
 } from "./utils/createCommandData.js";
 import { ControlCommands } from "./utils/constants.js";
-import { Readable } from 'node:stream';
-import {
-    ReadableStream,
-  } from 'node:stream/web';
+import { Readable } from "node:stream";
+import { ReadableStream } from "node:stream/web";
+
+import { defaultPeerMaxConcurrentStreams } from "./utils/constants.js";
 
 const {
     HTTP2_HEADER_PATH,
@@ -42,6 +42,10 @@ class DispatchClient {
             );
         }
         this.options = options;
+        if (!options?.peerMaxConcurrentStreams) {
+            this.options.peerMaxConcurrentStreams =
+                defaultPeerMaxConcurrentStreams;
+        }
     }
 
     async start() {

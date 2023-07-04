@@ -222,6 +222,10 @@ class ControllerStream extends BaseStream {
         }
     }
 
+    isClosed(){
+        return super.isClosed() || !this.pingTimer;
+    }
+
     cleanUp() {
         if (this.pingTimer) {
             clearInterval(this.pingTimer);

@@ -42,3 +42,5 @@ export const ControlCommands = {
     ping: "ping",
     delegateRequest: "delegateRequest"
 } as const;
+
+export const defaultPeerMaxConcurrentStreams = 500;

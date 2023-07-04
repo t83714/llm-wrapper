@@ -14,15 +14,15 @@ const {
 import sendPushRequest from "./utils/sendPushRequest.js";
 import express, { Express } from "express";
 import morgan from "morgan";
-import pkg from "#package.json" assert { type: "json" };
 import BaseStream from "./BaseStream.js";
 import getPathOnly from "./utils/getPathOnly.js";
+import { defaultPeerMaxConcurrentStreams } from "./utils/constants.js";
 
 const DEFAULT_CONFIG = {
     accessKeys: [] as string[],
     controllerServerPort: 6701,
     serviceServer: 6702,
-    peerMaxConcurrentStreams: 500,
+    peerMaxConcurrentStreams: defaultPeerMaxConcurrentStreams,
     // in milliseconds, used to keep session.
     pingInterval: 3000,
     enableServiceLogs: true,
@@ -39,11 +39,16 @@ type ControllerStreamHandler = (
     headers: http2.IncomingHttpHeaders
 ) => BaseStream | void | Promise<void> | Promise<BaseStream>;
 
+const createControllerStreamHandlerRegistryKey = (
+    method: string,
+    path: string
+) => `${method.toLowerCase()}@${path.toLowerCase()}`;
+
 class DispatchServer {
     public options: DispatchServerConfigOptions;
     private controllerServer: http2.Http2Server | null = null;
     private controllerSessions: http2.ServerHttp2Session[] = [];
-    private controllerStreams: BaseStream[] = [];
+    private controllerStreams: ControllerStream[] = [];
 
     private serviceApp: Express | null = null;
     private serviceServer: http.Server | null = null;
@@ -65,23 +70,19 @@ class DispatchServer {
         );
     }
 
-    createControllerStreamHandlerRegistryKey(method: string, path: string) {
-        return `${method.toLowerCase()}@${path.toLowerCase()}`;
-    }
-
     registerControllerStreamHandler(
         method: string,
         path: string,
         handler: ControllerStreamHandler
     ) {
         this.controllerStreamHandlerRegistry[
-            this.createControllerStreamHandlerRegistryKey(method, path)
+            createControllerStreamHandlerRegistryKey(method, path)
         ] = handler;
     }
 
     deregisterControllerStreamHandler(method: string, path: string) {
         delete this.controllerStreamHandlerRegistry[
-            this.createControllerStreamHandlerRegistryKey(method, path)
+            createControllerStreamHandlerRegistryKey(method, path)
         ];
     }
 
@@ -106,6 +107,28 @@ class DispatchServer {
         if (this.options.enableServiceLogs) {
             app.use(morgan("combined"));
         }
+        app.use(express.json());
+        app.use(express.text());
+        app.use((req, res) => {
+            const liveControllerStreams = this.controllerStreams.filter(
+                (s) => !s.isClosed()
+            );
+            if (!liveControllerStreams.length) {
+                res.status(503).send(
+                    "No live controller stream available. Please try later."
+                );
+                return;
+            }
+            const pickedControllerStream =
+                liveControllerStreams[
+                    Math.floor(Math.random() * liveControllerStreams.length)
+                ];
+            pickedControllerStream
+                .delegateExpressRequest(req, res)
+                .catch((e) =>
+                    res.status(500).send(`Failed to delegate request: ${e}`)
+                );
+        });
     }
 
     startControllerServer() {
@@ -141,11 +164,13 @@ class DispatchServer {
                         HTTP2_HEADER_METHOD
                     ] as string;
                     const requestPath = headers[HTTP2_HEADER_PATH] as string;
-                    const requestPathname = requestPath ? getPathOnly(requestPath) : "/";
+                    const requestPathname = requestPath
+                        ? getPathOnly(requestPath)
+                        : "/";
 
                     const handler =
                         this.controllerStreamHandlerRegistry[
-                            this.createControllerStreamHandlerRegistryKey(
+                            createControllerStreamHandlerRegistryKey(
                                 requestMethod,
                                 requestPathname
                             )
@@ -156,7 +181,7 @@ class DispatchServer {
                         if (result instanceof Promise) {
                             result = await result;
                         }
-                        if (result instanceof BaseStream) {
+                        if (result instanceof ControllerStream) {
                             this.controllerStreams.push(result);
                         }
                     } else {
