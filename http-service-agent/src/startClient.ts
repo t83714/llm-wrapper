@@ -9,7 +9,9 @@ const argv = await yargs(hideBin(process.argv))
     .options({
         accessKey: {
             demandOption: true,
-            describe: "The remote dispatch server access key. basic auth format",
+            describe:
+                "The remote dispatch server access key. " +
+                "Can be a string contains the password only or a string in the format of `username:password`.",
             type: "string"
         },
         dispatchServerBaseUrl: {
@@ -23,6 +25,10 @@ const argv = await yargs(hideBin(process.argv))
             describe: "Target workload server base url.",
             coerce: (v) => new URL(v),
             type: "string"
+        },
+        peerMaxConcurrentStreams: {
+            describe: "Max. concurrent stream. Default: 500",
+            type: "number"
         }
     }).argv;
 
