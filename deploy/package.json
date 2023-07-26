@@ -1,0 +1,16 @@
+{
+    "name": "@llmw/deploy",
+    "version": "1.0.0",
+    "description": "Helm charts for LLM-WRAPPER",
+    "scripts": {
+        "update-all-charts": "yarn clean-up-all-charts && helm dep up http-service-agent-server",
+        "clean-up-all-charts": "rm -rf http-service-agent-server/charts",
+        "add-all-chart-version-changes": "git ls-files -m | grep Chart.yaml | xargs git add && git ls-files -m | grep Chart.lock | xargs git add && git ls-files -m | grep values.yaml | xargs git add",
+        "add-all-helm-docs-changes": "yarn helm-docs && git ls-files -m | grep -i readme.md | xargs git add",
+        "version": "yarn update-helm-chart-version && yarn update-all-charts && yarn add-all-chart-version-changes && yarn add-all-helm-docs-changes",
+        "helm-lint": "helm template http-service-agent-server -f helm-lint-test-deploy-http-service-agent-server.yaml 1>/dev/null",
+        "helm-docs": "docker run --rm -v \"$(pwd):/helm-docs\" -u $(id -u) jnorwood/helm-docs:v1.11.0"
+    },
+    "author": "",
+    "license": "Apache-2.0"
+}

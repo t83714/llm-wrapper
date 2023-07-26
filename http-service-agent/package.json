@@ -1,5 +1,5 @@
 {
-  "name": "http-service-agent",
+  "name": "@llmw/http-service-agent",
   "version": "1.0.0",
   "type": "module",
   "repository": "git@github.com:t83714/llm-wrapper.git",
@@ -11,7 +11,10 @@
     "dev-client": "ts-node --esm ./src/startClient.ts",
     "dev-server": "ts-node --esm ./src/startServer.ts",
     "start-client": "node ./dist/startClient.js",
-    "start-server": "node ./dist/startServer.js"
+    "start-server": "node ./dist/startServer.js",
+    "docker-build-local": "create-docker-context-for-node-component --build --push --tag auto --local",
+    "docker-build-prod": "create-docker-context-for-node-component --build --push --tag auto --repository=ghcr.io/t83714/http-service-agent",
+    "retag-and-push": "retag-and-push"
   },
   "devDependencies": {
     "@types/express": "^4.17.17",
@@ -33,5 +36,11 @@
     "morgan": "^1.10.0",
     "stream-json": "^1.8.0",
     "uuid": "^9.0.0"
+  },
+  "config": {
+    "docker": {
+      "name": "http-service-agent",
+      "include": "node_modules dist Dockerfile package.json"
+    }
   }
 }
