@@ -36,6 +36,10 @@ const client = new DispatchClient(argv);
 
 await client.start();
 
+process.on("unhandledRejection", (reason, p) => {
+    console.error(`Caught unhandledRejection: ${reason}\n` + "Promise:", p);
+});
+
 process.on("uncaughtException", (err, origin) => {
     console.error(`Caught exception: ${err}\n` + `Exception origin: ${origin}`);
 });

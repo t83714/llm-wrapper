@@ -11,7 +11,6 @@ const {
     HTTP2_HEADER_STATUS,
     HTTP2_HEADER_CONTENT_TYPE
 } = http2.constants;
-import sendPushRequest from "./utils/sendPushRequest.js";
 import express, { Express } from "express";
 import morgan from "morgan";
 import BaseStream from "./BaseStream.js";
@@ -21,7 +20,7 @@ import { defaultPeerMaxConcurrentStreams } from "./utils/constants.js";
 const DEFAULT_CONFIG = {
     accessKeys: [] as string[],
     controllerServerPort: 6701,
-    serviceServer: 6702,
+    serviceServerPort: 6702,
     peerMaxConcurrentStreams: defaultPeerMaxConcurrentStreams,
     // in milliseconds, used to keep session.
     pingInterval: 3000,
@@ -50,7 +49,6 @@ class DispatchServer {
     private controllerSessions: http2.ServerHttp2Session[] = [];
     private controllerStreams: ControllerStream[] = [];
 
-    private serviceApp: Express | null = null;
     private serviceServer: http.Server | null = null;
 
     private controllerStreamHandlerRegistry: {
@@ -103,7 +101,6 @@ class DispatchServer {
 
     startServingApp() {
         const app = express();
-        this.serviceApp = app;
         if (this.options.enableServiceLogs) {
             app.use(morgan("combined"));
         }
@@ -129,6 +126,7 @@ class DispatchServer {
                     res.status(500).send(`Failed to delegate request: ${e}`)
                 );
         });
+        this.serviceServer = app.listen(this.options.serviceServerPort);
     }
 
     startControllerServer() {
@@ -236,7 +234,6 @@ class DispatchServer {
             this.serviceServer.close();
             this.serviceServer.closeAllConnections();
             this.serviceServer = null;
-            this.serviceApp = null;
         }
         if (this.controllerStreams.length) {
             for (const stream of this.controllerStreams) {
