@@ -61,7 +61,7 @@ def llm(prompt, stop=None, **kwargs):
     max_new_tokens = 500,
     **kwargs
   )
-  result = model.generate(inputs, stopping_criteria=[check_stop], **kwargs)
+  result = model.generate(inputs, stopping_criteria=[check_stop], **generation_kwargs)
   return result[0]["generated_text"].rstrip(check_stop.matched)
 
 app = Flask("llm-api")
