@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, json
 from transformers import AutoConfig, AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer, StoppingCriteria, StoppingCriteriaList
 import torch
 
@@ -69,6 +69,6 @@ app = Flask("llm-api")
 @app.route('/', methods=['POST'])
 def serve_llm():
   resp = llm(**request.json)
-  return jsonify(resp)
+  return json.dumps(resp)
 
 app.run(host="0.0.0.0", port="6801")

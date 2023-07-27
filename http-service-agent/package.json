@@ -13,7 +13,7 @@
     "start-client": "node ./dist/startClient.js",
     "start-server": "node ./dist/startServer.js",
     "docker-build-local": "create-docker-context-for-node-component --build --push --tag auto --local",
-    "docker-build-prod": "create-docker-context-for-node-component --build --push --tag auto --repository=ghcr.io/t83714/http-service-agent",
+    "docker-build-prod": "create-docker-context-for-node-component --build --push --tag auto --repository=ghcr.io/t83714/llm-wrapper",
     "retag-and-push": "retag-and-push"
   },
   "devDependencies": {
