@@ -61,8 +61,9 @@ def llm(prompt, stop=None, **kwargs):
     max_new_tokens = 500,
     **kwargs
   )
-  result = model.generate(**generation_kwargs)
-  return result[0]["generated_text"].rstrip(check_stop.matched)
+  outputs = model.generate(**generation_kwargs)
+  result = tokenizer.decode(outputs[0], skip_special_tokens=True)
+  return result
 
 app = Flask("llm-api")
 
