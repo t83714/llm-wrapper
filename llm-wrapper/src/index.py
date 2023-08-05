@@ -46,7 +46,6 @@ class CheckStop(StoppingCriteria):
         return False
 
 def llm(prompt, stop=None, **kwargs):
-  check_stop = CheckStop(stop)
   inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
   generation_kwargs = dict(
     inputs,
