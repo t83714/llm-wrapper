@@ -16,9 +16,11 @@ import morgan from "morgan";
 import BaseStream from "./BaseStream.js";
 import getPathOnly from "./utils/getPathOnly.js";
 import { defaultPeerMaxConcurrentStreams } from "./utils/constants.js";
+import fse from "fs-extra";
 
 const DEFAULT_CONFIG = {
     accessKeys: [] as string[],
+    accessKeysFile: undefined as string | undefined,
     controllerServerPort: 6701,
     serviceServerPort: 6702,
     peerMaxConcurrentStreams: defaultPeerMaxConcurrentStreams,
@@ -68,6 +70,20 @@ class DispatchServer {
         );
     }
 
+    loadAccessKeysFromFile() {
+        const filePath = this.options.accessKeysFile;
+        if (!filePath || !fse.existsSync(filePath)) {
+            return;
+        }
+        const keys = fse.readJSONSync(filePath);
+        if (keys?.length) {
+            this.options.accessKeys = keys;
+            console.log(
+                `Loaded ${keys.length} access keys from '${filePath}'.`
+            );
+        }
+    }
+
     registerControllerStreamHandler(
         method: string,
         path: string,
@@ -106,6 +122,8 @@ class DispatchServer {
         }
         app.use(express.json());
         app.use(express.text());
+        app.get("/__status/liveness", (req, res) => res.send("OK"));
+        app.get("/__status/readiness", (req, res) => res.send("OK"));
         app.use((req, res) => {
             const liveControllerStreams = this.controllerStreams.filter(
                 (s) => !s.isClosed()

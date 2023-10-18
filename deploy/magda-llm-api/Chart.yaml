@@ -1,0 +1,10 @@
+apiVersion: v2
+name: magda-llm-api
+description: A Helm chart for Kubernetes
+type: application
+version: 1.0.0
+kubeVersion: ">= 1.16.0-0"
+dependencies:
+  - name: magda-common
+    version: "2.3.0"
+    repository: "oci://ghcr.io/magda-io/charts"

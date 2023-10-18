@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: magda-llm-api-fastchat-controller
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxUnavailable: {{ .Values.global.rollingUpdate.maxUnavailable | default 0 }}
+  selector:
+    matchLabels:
+      service: magda-llm-api-fastchat-controller
+  template:
+    metadata:
+      labels:
+        service: magda-llm-api-fastchat-controller
+    spec:
+      {{- $imageEnv := omit . "Values" }}
+      {{- $_ := set $imageEnv "Values" (omit .Values "image") }}
+      {{- $_ := set $imageEnv.Values "image" .Values.fastChatImage }}
+      {{- include "magda.imagePullSecrets" $imageEnv | indent 6 }}
+      containers:
+      - name: magda-llm-api
+        image: {{ include "magda.image" $imageEnv | quote }}
+        imagePullPolicy: {{ include "magda.imagePullPolicy" $imageEnv | quote }}
+        ports:
+        - containerPort: {{ .Values.fastChatController.port }}
+        command:
+          - python3.9
+          - -m
+          - fastchat.serve.controller
+          - --host
+          - "0.0.0.0"
+          - --port
+          - {{ .Values.fastChatController.port | quote }}
+{{- if .Values.global.enableLivenessProbes }}
+        livenessProbe:
+          httpGet:
+            path: /test_connection
+            port: {{ .Values.fastChatController.port }}
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /test_connection
+            port: {{ .Values.fastChatController.port }}
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 30
+{{- end }}
+        resources:
+{{ toYaml .Values.fastChatController.resources | indent 10 }}
+      #   volumeMounts:
+      #   - name: app-config-volume
+      #     mountPath: /etc/config
+      # volumes:
+      # - name: app-config-volume
+      #   configMap:
+      #     name: search-api-app-conf

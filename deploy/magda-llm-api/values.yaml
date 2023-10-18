@@ -1,0 +1,85 @@
+global:
+  image: {}
+  rollingUpdate: {}
+  externalUrl: ""
+  exposeNodePorts: false
+
+
+proxyServer:
+  # -- Proxy controller server port. Running at http 2.0
+  controllerServerPort: 6701
+  # -- Service server (the http/1.1 server that serves LLM requests) port
+  serviceServerPort: 6702
+  # -- Ping internal for controller server to determine the liveness of the client servers
+  pingInterval: 300
+  # -- Whether turned on service server access logs
+  enableServiceLogs: true
+  # -- whether turn on debug mode
+  debug: false
+  # -- Max. concurrent stream. Default: 500
+  peerMaxConcurrentStreams:
+  # -- wait up to 25 seconds (25000 milsecond) for existing streams to be finish before force shutdown
+  # in milseconds
+  gracefulShutdownDeadline: 25000
+  # -- Whether auto generate access keys. The accessKeys will be used by proxy clients for connecting to the proxy server.
+  # The generated keys will be stored in a kubernetes secret with name specified in `accessKeySecretName` field.
+  autoGenerateAccessKeys: true
+  # -- Set how many access keys to be generated. Only works when `autoGenerateAccessKeys` is true
+  # please note, existing keys will not be updated.
+  # e.g. When change the number from 10 to 12, 2 new keys will be generated but the first 10 existing keys will be kept unchanged.
+  # e.g. When change the number from 10 to 8, no keys will be removed in exising secrets.
+  autoGenerateAccessKeysNumber: 10
+  # -- the secret name that stores the access keys.
+  accessKeySecretName: magda-llm-api-proxy-controller-access-keys
+  resources:
+    requests:
+      cpu: 100m
+      memory: 300Mi
+    limits:
+      cpu: 500m
+
+
+fastChatController:
+  port: 6703
+  resources:
+    requests:
+      cpu: 100m
+      memory: 300Mi
+    limits:
+      cpu: 500m
+
+fastChatApiServer:
+  port: 6704
+  targetPort: 80
+  resources:
+    requests:
+      cpu: 100m
+      memory: 300Mi
+    limits:
+      cpu: 500m
+
+httpServiceAgentImage: 
+  name: "http-service-agent"
+  repository: "ghcr.io/t83714/llm-wrapper"
+  # tag: 
+  # pullPolicy: 
+  # pullSecrets: 
+
+fastChatImage: 
+  name: "fastchat"
+  repository: "ghcr.io/t83714/llm-wrapper"
+  # tag: 
+  # pullPolicy: 
+  # pullSecrets: 
+
+defaultImage:
+  repository: "ghcr.io/t83714/llm-wrapper"
+  pullPolicy: IfNotPresent
+  pullSecrets: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 300Mi
+  limits:
+    cpu: 500m

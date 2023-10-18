@@ -12,9 +12,15 @@ const argv = await yargs(hideBin(process.argv))
             array: true,
             describe:
                 "A list of acceptable access key strings." +
-                "Each access key can be a string contains the password only or a string in the format of `username:password`.",
+                "Each access key can be a string contains the password only or a string in the format of `username:password`." + 
+                "Will only used when `accessKeysFile` is not specified.",
             coerce: (v: any[]) => v.filter((item) => !!item),
-            demandOption: true,
+            type: "string"
+        },
+        accessKeysFile: {
+            describe:
+                "A file path that contains acceptable access key strings in JSON array. " +
+                "Each access key can be a string contains the password only or a string in the format of `username:password`.",
             type: "string"
         },
         controllerServerPort: {
